@@ -254,9 +254,9 @@ class SpaPump:
     def __str__(self):
         return f'<SpaPump {self.id}: {self.type}={self.state}>'
 
-
+    
 class SpaLight:
-    LightMode = Enum('LightMode', 'PURPLE ORANGE RED YELLOW GREEN AQUA BLUE HIGH_SPEED_WHEEL OFF')
+    LightMode = Enum('LightMode', 'PURPLE ORANGE RED YELLOW GREEN AQUA BLUE HIGH_SPEED_COLOR_WHEEL OFF WHITE')
 
     def __init__(self, spa: Spa, **properties):
         self.spa = spa
@@ -282,7 +282,7 @@ class SpaLight:
         await self.spa.request('PATCH', f'lights/{self.zone}', body)
 
     def __str__(self):
-        return f'<SpaLight {self.zone}: {self.red}/{self.green}/{self.blue}/{self.white}>'
+        return f'<SpaLight {self.zone}: {self.mode} {self.intensity} {self.red}/{self.green}/{self.blue}/{self.white}>'
 
 
 class SpaReminder:

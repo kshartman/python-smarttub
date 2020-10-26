@@ -238,6 +238,7 @@ async def main(args):
                         energy_usage_day = await spa.get_energy_usage(spa.EnergyUsageInterval.DAY, end_date=datetime.date.today(), start_date=datetime.date.today() - datetime.timedelta(days=7))
                         if (args.verbose):
                             pprint(energy_usage_day)
+    await asyncio.sleep(1)
     return
     
 

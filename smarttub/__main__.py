@@ -1,14 +1,15 @@
+import argparse
 import asyncio
 import datetime
 import logging
 from pprint import pprint
 import sys
-import argparse
 
 import aiohttp
 
-from . import SmartTub
+from . import SmartTub, SpaLight
 
+# Temperature conversion helpers
 def fahrenheit(c):
     return round(c * (9.0 / 5.0) + 32, 0)
 
@@ -18,7 +19,8 @@ def fdegrees(c):
 def celsius(f):
     return round((f - 32) * (5.0 / 9.0), 1)
 
-lightcolornames = [ 'RED', 'GREEN', 'BLUE', 'WHITE', 'ORANGE', 'PURPLE', 'YELLOW', 'AQUA' ]
+# Light helpers
+lightcolornames = ['RED', 'GREEN', 'BLUE', 'WHITE', 'ORANGE', 'PURPLE', 'YELLOW', 'AQUA']
 
 def lightmodename(cs):
     cs = str(cs).upper()
@@ -30,7 +32,7 @@ def lightmodename(cs):
         return cs
     else:
         return ''
-        
+
 lightnames = {
     '1': 'SEATS',
     '2': 'WATERFALL',
@@ -39,7 +41,6 @@ lightnames = {
 }
 
 all_lights = [1, 2, 3, 4]
-
 exterior_lights = 4
 
 def lightname(l):
@@ -60,7 +61,7 @@ def lightnumber(l):
         if (key == l or value == l):
             return int(key)
     return 0
-        
+
 def lightoperations(ll):
     result = {}
     if type(ll) == list:
@@ -75,30 +76,30 @@ def lightoperations(ll):
                 else:
                     lcmd = [[lightnumber(lcmd[0])], lcmd[1]]
             else:
-                raise('Bad Light Color Commands')
+                raise Exception('Bad Light Color Commands')
             for l in lcmd[0]:
                 if l != exterior_lights or lcmd[1] == 'OFF' or lcmd[1] == 'WHITE':
                     result[l] = lcmd[1]
     return result
 
-
-def lightmode(lm, light):
-    if lm == 'RED': return light.LightMode.RED
-    elif lm == 'GREEN': return light.LightMode.GREEN
-    elif lm == 'BLUE': return light.LightMode.BLUE
-    elif lm == 'WHITE': return light.LightMode.WHITE
-    elif lm == 'ORANGE': return light.LightMode.ORANGE
-    elif lm == 'PURPLE': return light.LightMode.PURPLE
-    elif lm == 'YELLOW': return light.LightMode.YELLOW
-    elif lm == 'AQUA': return light.LightMode.AQUA
-    elif lm == 'OFF': return light.LightMode.OFF    
-    elif lm == 'MULTI': return light.LightMode.HIGH_SPEED_COLOR_WHEEL
-    elif lm == 'HIGH_SPEED_COLOR_WHEEL': return light.LightMode.HIGH_SPEED_COLOR_WHEEL
-    elif lm == 'HIGH_SPEED_WHEEL': return light.LightMode.HIGH_SPEED_COLOR_WHEEL        
+def lightmode(lm):
+    lm = str(lm).upper()
+    if lm == 'RED': return SpaLight.LightMode.RED
+    elif lm == 'GREEN': return SpaLight.LightMode.GREEN
+    elif lm == 'BLUE': return SpaLight.LightMode.BLUE
+    elif lm == 'WHITE': return SpaLight.LightMode.WHITE
+    elif lm == 'ORANGE': return SpaLight.LightMode.ORANGE
+    elif lm == 'PURPLE': return SpaLight.LightMode.PURPLE
+    elif lm == 'YELLOW': return SpaLight.LightMode.YELLOW
+    elif lm == 'AQUA': return SpaLight.LightMode.AQUA
+    elif lm == 'OFF': return SpaLight.LightMode.OFF
+    elif lm == 'MULTI': return SpaLight.LightMode.HIGH_SPEED_COLOR_WHEEL
+    elif lm == 'HIGH_SPEED_COLOR_WHEEL': return SpaLight.LightMode.HIGH_SPEED_COLOR_WHEEL
+    elif lm == 'HIGH_SPEED_WHEEL': return SpaLight.LightMode.HIGH_SPEED_COLOR_WHEEL
     else:
         raise Exception('Invalid Light Mode')
 
-    
+# Pump helpers
 pumpnames = {
     'P1': 'JET1',
     'P2': 'JET2',
@@ -106,9 +107,7 @@ pumpnames = {
     'BLOWER': 'BLOWER',
 }
 
-
-allpumps = [ 'P1', 'P2', 'CP', 'BLOWER' ]
-
+allpumps = ['P1', 'P2', 'CP', 'BLOWER']
 
 def pumpalias(p):
     p = str(p).upper()
@@ -116,7 +115,6 @@ def pumpalias(p):
         if (key == p or value == p):
             return value
     return ''
-
 
 def pumpname(p):
     p = str(p).upper()
@@ -126,7 +124,6 @@ def pumpname(p):
         elif (p == 'ALL'):
             return p
     return ''
-
 
 def pumplist(pl):
     if (not type(pl) == list):
@@ -138,152 +135,253 @@ def pumplist(pl):
         else:
             return pl
 
-        
-async def main(args):
+
+async def info_command(spas, args):
+    for spa in spas:
+        print(f"= Spa '{spa.name}' =\n")
+        if args.all or args.status or args.location or args.locks:
+            status = await spa.get_status_full()
+
+        if args.all or args.status:
+            print("== Status ==")
+            status_dict = status.properties.copy()
+            # redact location for privacy
+            location = status_dict.pop("location")
+            pprint(status_dict)
+            print()
+
+        if args.location:
+            # not included in --all
+            print(
+                f"Location: {location['latitude']} {location['longitude']} (accuracy: {location['accuracy']})\n"
+            )
+
+        if args.all or args.pumps:
+            print("== Pumps ==")
+            for pump in status.pumps:
+                print(pump)
+            print()
+
+        if args.all or args.lights:
+            print("== Lights ==")
+            for light in status.lights:
+                print(light)
+            print()
+
+        if args.all or args.errors:
+            print("== Errors ==")
+            for error in await spa.get_errors():
+                print(error)
+            print()
+
+        if args.all or args.reminders:
+            print("== Reminders ==")
+            for reminder in await spa.get_reminders():
+                print(reminder)
+            print()
+
+        if args.all or args.locks:
+            print("== Locks ==")
+            for lock in status.locks.values():
+                print(lock)
+            print()
+
+        if args.all or args.energy:
+            print("== Energy usage ==")
+            energy_usage_day = spa.get_energy_usage(
+                spa.EnergyUsageInterval.DAY,
+                end_date=datetime.date.today(),
+                start_date=datetime.date.today() - datetime.timedelta(days=7),
+            )
+            pprint(await energy_usage_day)
+            print()
+
+        if args.all or args.sensors:
+            print("== Sensors ==")
+            for sensor in status.sensors:
+                print(sensor)
+            print()
+
+        if args.all or args.debug:
+            debug_status = await spa.get_debug_status()
+            print("== Debug status ==")
+            pprint(debug_status)
+            print()
+
+
+async def set_command(spas, args):
+    for spa in spas:
+        if args.temperature:
+            await spa.set_temperature(args.temperature)
+
+        # Handle pump on/off operations
+        if args.turnon or args.turnoff:
+            turnon = pumplist(args.turnon) if args.turnon else []
+            turnoff = pumplist(args.turnoff) if args.turnoff else []
+
+            pumps = await spa.get_pumps()
+            for pump in pumps:
+                pump_state = pump.state
+                if pump.id in turnon and pump_state == pump.PumpState.OFF:
+                    if pump.id != 'CP':
+                        await pump.toggle()
+                        if args.verbosity > 0:
+                            print(f"Turned on {pumpalias(pump.id)}")
+                elif pump.id in turnoff and pump_state != pump.PumpState.OFF:
+                    if pump.id != 'CP':
+                        await pump.toggle()
+                        if args.verbosity > 0:
+                            print(f"Turned off {pumpalias(pump.id)}")
+
+        # Handle light mode (original upstream syntax)
+        if args.light_mode:
+            for light in await spa.get_lights():
+                if args.verbosity > 0:
+                    print(light)
+                mode = light.LightMode[args.light_mode]
+                if mode == light.LightMode.OFF:
+                    await light.set_mode(mode, 0)
+                else:
+                    await light.set_mode(mode, 50)
+
+        # Handle lights with custom syntax (e.g., "ALL:RED", "SEATS:BLUE")
+        if args.lights:
+            lights = await spa.get_lights()
+            lightops = lightoperations(args.lights)
+            for light in lights:
+                try:
+                    modename = lightops[light.zone]
+                    if modename == 'OFF':
+                        await light.set_mode(light.LightMode.OFF, 0)
+                    else:
+                        await light.set_mode(lightmode(modename), 100)
+                    if args.verbosity > 0:
+                        print(f"Set {lightname(light.zone)} to {modename}")
+                except KeyError:
+                    # This light zone not specified in the operations
+                    pass
+
+        if args.snooze_reminder:
+            reminder_id, days = args.snooze_reminder
+            days = int(days)
+            reminder = next(
+                reminder
+                for reminder in await spa.get_reminders()
+                if reminder.id == reminder_id
+            )
+            await reminder.snooze(days)
+
+        if args.reset_reminder:
+            reminder_id, days = args.reset_reminder
+            days = int(days)
+            reminder = next(
+                reminder
+                for reminder in await spa.get_reminders()
+                if reminder.id == reminder_id
+            )
+            await reminder.reset(days)
+
+        if args.lock:
+            status = await spa.get_status()
+            lock = status.locks[args.lock.lower()]
+            await lock.lock()
+            print("OK")
+
+        if args.unlock:
+            status = await spa.get_status()
+            lock = status.locks[args.unlock.lower()]
+            await lock.unlock()
+            print("OK")
+
+
+async def main(argv):
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-u", "--username", required=True, help="SmartTub account email"
+    )
+    parser.add_argument(
+        "-p", "--password", required=True, help="SmartTub account password"
+    )
+    parser.add_argument("-v", "--verbosity", action="count", default=0)
+    subparsers = parser.add_subparsers()
+
+    info_parser = subparsers.add_parser("info", help="Show information about the spa")
+    info_parser.set_defaults(func=info_command)
+    info_parser.add_argument(
+        "-a", "--all", action="store_true", help="Show all info except location"
+    )
+    info_parser.add_argument("--spas", action="store_true")
+    info_parser.add_argument("--status", action="store_true")
+    info_parser.add_argument(
+        "--location", action="store_true", help="Show GPS location"
+    )
+    info_parser.add_argument("--pumps", action="store_true")
+    info_parser.add_argument("--lights", action="store_true")
+    info_parser.add_argument("--errors", action="store_true")
+    info_parser.add_argument("--reminders", action="store_true")
+    info_parser.add_argument("--locks", action="store_true")
+    info_parser.add_argument("--debug", action="store_true")
+    info_parser.add_argument("--sensors", action="store_true")
+    info_parser.add_argument("--energy", action="store_true")
+
+    set_parser = subparsers.add_parser("set", help="Change settings on the spa")
+    set_parser.set_defaults(func=set_command)
+    set_parser.add_argument(
+        "-l", "--light_mode", choices=[mode.name for mode in SpaLight.LightMode]
+    )
+    set_parser.add_argument("-t", "--temperature", type=float)
+    set_parser.add_argument(
+        "--lights", metavar='NAME:COLOR', nargs='+',
+        help='Set light color mode (e.g., ALL:RED, SEATS:BLUE). '
+             'Colors: red, green, blue, white, orange, purple, yellow, aqua, multi, off. '
+             'Names: seats, footwell, waterfall, exterior, all'
+    )
+    set_parser.add_argument(
+        "--on", metavar='PUMP', dest='turnon', nargs='+',
+        help='Turn pumps on. Pumps: P1, P2, CP, BLOWER, JET1, JET2, WATERFALL, or ALL'
+    )
+    set_parser.add_argument(
+        "--off", metavar='PUMP', dest='turnoff', nargs='+',
+        help='Turn pumps off. Pumps: P1, P2, CP, BLOWER, JET1, JET2, WATERFALL, or ALL'
+    )
+    # TODO: should enforce types of str, int
+    set_parser.add_argument(
+        "--snooze-reminder",
+        nargs=2,
+        help="Snooze a reminder",
+        metavar=("REMINDER_ID", "DAYS"),
+    )
+    # TODO: should enforce types of str, int
+    set_parser.add_argument(
+        "--reset-reminder",
+        nargs=2,
+        help="Reset a reminder",
+        metavar=("REMINDER_ID", "DAYS"),
+    )
+    set_parser.add_argument("--lock", type=str)
+    set_parser.add_argument("--unlock", type=str)
+
+    args = parser.parse_args(argv)
+
+    if args.verbosity > 1:
+        log_level = logging.DEBUG
+    else:
+        log_level = logging.INFO
+
+    logging.basicConfig(level=log_level)
+
     async with aiohttp.ClientSession() as session:
-
-        turnon = pumplist(args.turnon)
-        turnoff = pumplist(args.turnoff)        
-
         st = SmartTub(session)
         await st.login(args.username, args.password)
-        if (args.verbose or args.debug):
-            print('# ---------------------------- ACCOUNT')
+
         account = await st.get_account()
-        if (args.verbose):
-            print(account)
-        if (args.verbose or args.debug):
-            print('# ---------------------------- SPAS')
+
         spas = await account.get_spas()
-        if (args.verbose):
-            print(spas)
-        spaid = args.spa.upper()
-        for spa in spas:
-            if (spaid == 'ALL' or spaid == spa.id):
-                if (args.verbose or args.debug):
-                    print('# ---------------------------- SPA ', spa.id)
-                elif (args.summary):
-                    print('{:<9} {:<}'.format('SPA:', spa.id))
-                status = await spa.get_status()
-                if (args.set_temp >= 90.0 and args.set_temp <= 104.0):
-                    await st._refresh_token()
-                    set_temp = spa.set_temperature(celsius(args.set_temp))
-                    await set_temp
-                    set_temp = celsius(args.set_temp)
-                else:
-                    set_temp = status['setTemperature']
-                if (not (args.debug or args.summary or args.verbose)) and not turnon and not turnoff and not args.lights:
-                    if (args.set_temp or args.get_temp):
-                        print(fdegrees(status['water']['temperature']), ' / ', fdegrees(set_temp))
-                    return
-                if (args.verbose):
-                    pprint(status)
-                elif (args.summary):
-                    print('{:<9} {:<}'.format('ERROR:', status['error']['title']))
-                    print('{:<9} {:<} / {:<}'.format('TEMP:', fdegrees(status['water']['temperature']), fdegrees(set_temp)))
-                if (args.verbose or args.debug):
-                    print('# ---------------------------- PUMPS ')
-                pumps = spa.get_pumps()
-                for pump in await pumps:
-                    pump_state = pump.state
-                    if pump.id in turnon and pump_state == 'OFF':
-                        if pump.id != 'CP':
-                            pump_toggle = pump.toggle()
-                            await pump_toggle
-                            pump_state = 'ON'
-                    elif pump.id in turnoff and pump_state != 'OFF':
-                        if pump.id != 'CP':
-                            pump_toggle = pump.toggle()
-                            await pump_toggle
-                            pump_state = 'OFF'
-                    if (args.verbose):
-                        print(pump)
-                    elif (args.summary):
-                        print('{:<9} {:<9} - {:<}'.format('PUMP:', pumpalias(pump.id), pump_state))
-                if (args.verbose or args.debug):
-                    print('# ---------------------------- LIGHTS ')
-                lights = spa.get_lights()
-                lightops = lightoperations(args.lights)
-                for light in await lights:
-                    try:
-                        modename = lightops[light.zone]
-                        if modename == 'OFF':
-                            set_mode = light.set_mode(light.LightMode.OFF, 0)
-                        else:
-                            set_mode = light.set_mode(lightmode(modename, light), 100)
-                        await set_mode
-                    except KeyError:
-                        modename = light.mode
-                    if (args.verbose):
-                        print(light)
-                    elif (args.summary):
-                        print('{:<9} {:<9} - {:<}'.format('LIGHT:', lightname(light.zone), lightmodename(modename)))
-                if (args.verbose or args.debug):
-                    print('# ---------------------------- ERRORS ')
-                    errors = await spa.get_errors()
-                    if (args.verbose):
-                        pprint(errors)
-                    print('# ---------------------------- REMINDERS ')
-                    reminders = spa.get_reminders()
-                    for reminder in await reminders:
-                        if (args.verbose):
-                            print(reminder)
-                    if (args.verbose or args.debug):
-                        print('# ---------------------------- DEBUG STATUS ')
-                        debug_status = await spa.get_debug_status()
-                        if (args.verbose):
-                            pprint(debug_status)
-                    if (args.verbose or args.debug):
-                        print('# ---------------------------- ENERGY USAGE ')
-                        energy_usage_day = await spa.get_energy_usage(spa.EnergyUsageInterval.DAY, end_date=datetime.date.today(), start_date=datetime.date.today() - datetime.timedelta(days=7))
-                        if (args.verbose):
-                            pprint(energy_usage_day)
+        await args.func(spas, args)
+
+    # Allow async tasks to complete
     await asyncio.sleep(1)
-    return
-    
-
-class SmartFormatter(argparse.HelpFormatter):
-    def _split_lines(self, text, width):
-        if text.startswith('R|'):
-            return text[2:].splitlines()
-        # this is the RawTextHelpFormatter._split_lines
-        return argparse.HelpFormatter._split_lines(self, text, width)
 
 
-parser = argparse.ArgumentParser(prog='smarttub', formatter_class=SmartFormatter, description='\
-Hot Tub Control -\n\
-PUMPS: P1, P2, CP, BLOWER.\n\
-LIGHTS: SEATS, FOOTWELL, WATERFALL, EXTERNAL.')
-parser.add_argument('username', help='account user name')
-parser.add_argument('password', help='account password')
-parser.add_argument('--spa', default='ALL', help='id of spa to manipulate or ALL (default)')
-parser.add_argument('--on', metavar='PN', dest='turnon', nargs='+', help='turn pumps on, one or more names or ALL')
-parser.add_argument('--off', metavar='PN', dest='turnoff', nargs='+', help='turn pumps off, one or more names or ALL')
-parser.add_argument('--set-temp', metavar='F°', type=float, default=0.0, help='set fahrenheit tempeature')
-parser.add_argument('--get-temp', action='store_true', help='get fahrenheit tempeature')
-parser.add_argument('--status', dest='summary', action='store_true', help='show status of temperature, lights and pumps')
-parser.add_argument('--verbose', action='store_true', help='dump json details (implies --status)')
-parser.add_argument('--debug', action='store_true', help='show debug trace')
-parser.add_argument('--lights', metavar='NAME:COLOR', nargs='+', help='R|\
-Set light color mode or turn them off\n\
---lights COLOR will set all lights to color, if supported, else WHITE\n\
-COLOR: red, green, blue, white, orange, purple, yellow, aqua, multi, off\n\
-NAME: seats, footwell, waterfall, exterior, all\n\
-Omitting NAME: and just providing a color is the same as ALL:COLOR\
-')
-
-args = parser.parse_args()
-if (args.debug):
-    logging.basicConfig(level=logging.DEBUG)
-
-if not (args.debug or args.verbose or args.turnon or args.turnoff or args.set_temp or args.get_temp or args.lights):
-    args.summary = True
-
-try:
-    asyncio.run(main(args))
-except:
-    print('ERROR:', sys.exc_info()[0])
-    sys.exit(1)
-else:
-    sys.exit(0)
-
+if __name__ == "__main__":
+    asyncio.run(main(sys.argv[1:]))

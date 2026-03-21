@@ -43,61 +43,66 @@ lightnames = {
 all_lights = [1, 2, 3, 4]
 exterior_lights = 4
 
-def lightname(l):
-    if type(l) == int:
-        if l >= 1 and l <= 4:
-            return lightnames[str(l)]
-    l = str(l).upper()
+def lightname(zone):
+    if isinstance(zone, int):
+        if 1 <= zone <= 4:
+            return lightnames[str(zone)]
+    zone = str(zone).upper()
     for key, value in lightnames.items():
-        if (key == l or value == l):
+        if key == zone or value == zone:
             return value
     return ''
 
-def lightnumber(l):
-    if type(l) == int:
-        return l
-    l = str(l).upper()
+def lightnumber(zone):
+    if isinstance(zone, int):
+        return zone
+    zone = str(zone).upper()
     for key, value in lightnames.items():
-        if (key == l or value == l):
+        if key == zone or value == zone:
             return int(key)
     return 0
 
 def lightoperations(ll):
     result = {}
-    if type(ll) == list:
-        for s in ll:
-            s = str(s).upper()
-            lcmd = s.split(':')
-            if len(lcmd) == 1:
-                lcmd = [all_lights, lcmd[0]]
-            elif len(lcmd) == 2:
-                if lcmd[0] == 'ALL':
-                    lcmd = [all_lights, lcmd[1]]
-                else:
-                    lcmd = [[lightnumber(lcmd[0])], lcmd[1]]
+    if not isinstance(ll, list):
+        return result
+    for s in ll:
+        s = str(s).upper()
+        lcmd = s.split(':')
+        if len(lcmd) == 1:
+            lcmd = [all_lights, lcmd[0]]
+        elif len(lcmd) == 2:
+            if lcmd[0] == 'ALL':
+                lcmd = [all_lights, lcmd[1]]
             else:
-                raise Exception('Bad Light Color Commands')
-            for l in lcmd[0]:
-                if l != exterior_lights or lcmd[1] == 'OFF' or lcmd[1] == 'WHITE':
-                    result[l] = lcmd[1]
+                lcmd = [[lightnumber(lcmd[0])], lcmd[1]]
+        else:
+            raise Exception('Bad Light Color Commands')
+        for zone in lcmd[0]:
+            if zone != exterior_lights or lcmd[1] == 'OFF' or lcmd[1] == 'WHITE':
+                result[zone] = lcmd[1]
     return result
+
+LIGHT_MODE_MAP = {
+    'RED': SpaLight.LightMode.RED,
+    'GREEN': SpaLight.LightMode.GREEN,
+    'BLUE': SpaLight.LightMode.BLUE,
+    'WHITE': SpaLight.LightMode.WHITE,
+    'ORANGE': SpaLight.LightMode.ORANGE,
+    'PURPLE': SpaLight.LightMode.PURPLE,
+    'YELLOW': SpaLight.LightMode.YELLOW,
+    'AQUA': SpaLight.LightMode.AQUA,
+    'OFF': SpaLight.LightMode.OFF,
+    'MULTI': SpaLight.LightMode.HIGH_SPEED_COLOR_WHEEL,
+    'HIGH_SPEED_COLOR_WHEEL': SpaLight.LightMode.HIGH_SPEED_COLOR_WHEEL,
+    'HIGH_SPEED_WHEEL': SpaLight.LightMode.HIGH_SPEED_COLOR_WHEEL,
+}
 
 def lightmode(lm):
     lm = str(lm).upper()
-    if lm == 'RED': return SpaLight.LightMode.RED
-    elif lm == 'GREEN': return SpaLight.LightMode.GREEN
-    elif lm == 'BLUE': return SpaLight.LightMode.BLUE
-    elif lm == 'WHITE': return SpaLight.LightMode.WHITE
-    elif lm == 'ORANGE': return SpaLight.LightMode.ORANGE
-    elif lm == 'PURPLE': return SpaLight.LightMode.PURPLE
-    elif lm == 'YELLOW': return SpaLight.LightMode.YELLOW
-    elif lm == 'AQUA': return SpaLight.LightMode.AQUA
-    elif lm == 'OFF': return SpaLight.LightMode.OFF
-    elif lm == 'MULTI': return SpaLight.LightMode.HIGH_SPEED_COLOR_WHEEL
-    elif lm == 'HIGH_SPEED_COLOR_WHEEL': return SpaLight.LightMode.HIGH_SPEED_COLOR_WHEEL
-    elif lm == 'HIGH_SPEED_WHEEL': return SpaLight.LightMode.HIGH_SPEED_COLOR_WHEEL
-    else:
-        raise Exception('Invalid Light Mode')
+    if lm in LIGHT_MODE_MAP:
+        return LIGHT_MODE_MAP[lm]
+    raise Exception('Invalid Light Mode')
 
 # Pump helpers
 pumpnames = {
@@ -126,7 +131,7 @@ def pumpname(p):
     return ''
 
 def pumplist(pl):
-    if (not type(pl) == list):
+    if not isinstance(pl, list):
         return []
     else:
         pl = list(map(pumpname, pl))

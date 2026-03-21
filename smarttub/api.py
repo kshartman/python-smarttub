@@ -20,6 +20,7 @@ class SmartTub:
     API_BASE = "https://api.smarttub.io"
 
     def __init__(self, session: aiohttp.ClientSession = None):
+        self._owns_session = session is None
         self._session = session or aiohttp.ClientSession()
         self._access_token: str | None = None
         self._refresh_token: str | None = None
@@ -29,6 +30,11 @@ class SmartTub:
         # Store credentials for re-authentication (no refresh endpoint available)
         self._username: str | None = None
         self._password: str | None = None
+
+    async def close(self):
+        """Close the session if we created it."""
+        if self._owns_session:
+            await self._session.close()
 
     async def login(self, username: str, password: str) -> None:
         """Authenticate to SmartTub.
@@ -126,7 +132,7 @@ class SmartTub:
         except aiohttp.ClientResponseError as e:
             raise APIError(e)
 
-        if int(r.headers["content-length"]) == 0:
+        if r.content_length == 0:
             ret = None
         else:
             ret = await r.json()
@@ -293,7 +299,7 @@ class Spa:
         body = {"displayTemperatureFormat": temperature_format.name}
         await self.request("POST", "config", body)
         await self._wait_for_state_change(
-            lambda state: state.display_temperature_format == temperature_format.name
+            lambda state: state.display_temperature_format == temperature_format
         )
 
     async def set_date_time(
@@ -329,7 +335,7 @@ class SpaState:
         self._prop("date", constructor=dateutil.parser.isoparse)
         self._prop("demoMode")
         self._prop("dipSwitches")
-        self._prop("displayTemperatureFormat")
+        self._prop("displayTemperatureFormat", constructor=lambda x: Spa.TemperatureFormat[x])
         self._prop("error")
         self._prop("errorCode")
         self._prop(
@@ -432,8 +438,11 @@ class SpaWaterState(SpaState):
         self.spa = spa
         self.properties = properties.copy()
 
+        self._prop("oxidationReductionPotential")
+        self._prop("ph")
         self._prop("temperature")
         self._prop("temperatureLastUpdated", constructor=dateutil.parser.isoparse)
+        self._prop("turbidity")
 
 
 class SpaPrimaryFiltrationCycle(SpaState):
@@ -531,7 +540,8 @@ class SpaLight:
         self.properties = properties
 
     async def set_mode(self, mode: LightMode, intensity: int):
-        assert (intensity == 0) == (mode == self.LightMode.OFF)
+        if (intensity == 0) != (mode == self.LightMode.OFF):
+            raise ValueError("intensity must be 0 for OFF mode and non-zero otherwise")
 
         body = {
             "intensity": intensity,

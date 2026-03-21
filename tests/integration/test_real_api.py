@@ -28,7 +28,7 @@ async def test_real_api_polling():
         # Save original state
         orig_temp = (await spa.get_status()).set_temperature
         orig_heat_mode = (await spa.get_status()).heat_mode
-        orig_temp_format = (await spa.get_status()).display_temperature_format
+        orig_temp_format = (await spa.get_status()).display_temperature_format  # Spa.TemperatureFormat enum
         orig_pump_state = None
         orig_light_mode = None
         orig_light_intensity = None
@@ -99,7 +99,7 @@ async def test_real_api_polling():
             await spa.set_temperature_format(new_format)
             await _wait_for(
                 lambda: spa.get_status(),
-                lambda s: s.display_temperature_format == new_format.name,
+                lambda s: s.display_temperature_format == new_format,
             )
         except Exception as e:
             print(f"WARNING: Could not set temperature format to {new_format}: {e}")
@@ -108,7 +108,7 @@ async def test_real_api_polling():
             await spa.set_temperature_format(orig_temp_format)
             await _wait_for(
                 lambda: spa.get_status(),
-                lambda s: s.display_temperature_format == orig_temp_format.name,
+                lambda s: s.display_temperature_format == orig_temp_format,
             )
         except Exception as e:
             unreverted["temperature_format"] = {
